@@ -8,7 +8,8 @@
         font-family: Arial, sans-serif;
         text-align: center;
         padding-top: 60px;
-        background: #f0f0f0;
+        background: url('Images/Kingdom Background.png') no-repeat center center fixed;
+        background-size: cover;
         overflow-x: hidden;
       }
       h1 {
@@ -287,6 +288,14 @@
         border-radius: 50%;
         display: none;
       }
+      #mainContent {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px auto;
+        max-width: 800px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      }
     </style>
   </head>
   <body>
@@ -332,15 +341,19 @@
       <button
         class="upgrade-button"
         style="display: none"
-        id="multUpgradeBtn"
-        onclick="buyMultUpgrade()"
-        onmouseover="showUpgradeTooltip('mult', event)"
+        id="hpUpgradeBtn"
+        onclick="upgradeHp()"
+        onmouseover="showUpgradeTooltip('hp', event)"
         onmouseout="hideUpgradeTooltip()"
       >
-        🔥 Unlock x2 Damage (Cost: <span id="multUpgradeCost">1000</span> Gold)
+        ❤️ Upgrade Max HP (Cost: <span id="hpUpgradeCost">1000</span> Gold)
+        <span style="font-size: 15px; color: #555"
+          >[Purchased: <span id="hpUpgradeCount">0</span>]</span
+        >
       </button>
     </div>
 
+    <div id="mainContent">
     <h1>Monster Clicker Adventure</h1>
     <div>
       <strong>Distance Traveled:</strong> <span id="distance">0</span> km
@@ -435,13 +448,13 @@
           "
         >
           <button onclick="moveForwardFromComplete()" class="upgrade-button">
-            ➡️ Move Forward
+            ➡️ Move Forward [F]
           </button>
           <button onclick="replayAreaFromComplete()" class="upgrade-button">
-            🔁 Replay Area
+            🔁 Replay Area [R]
           </button>
           <button onclick="moveBackFromComplete()" class="upgrade-button">
-            ⬅️ Go Back
+            ⬅️ Go Back [B]
           </button>
         </div>
         <div style="margin-top: 12px; font-size: 13px; color: #666">
@@ -482,6 +495,16 @@
         onmouseout="hideTooltip()"
       >
         💰 Double Gold (Cost: 3000 Gold)
+      </button>
+      <button
+        class="upgrade-button"
+        style="display: none"
+        id="multUpgradeBtn"
+        onclick="buyMultUpgrade()"
+        onmouseover="showUpgradeTooltip('mult', event)"
+        onmouseout="hideUpgradeTooltip()"
+      >
+        🔥 Unlock x2 Damage (Cost: <span id="multUpgradeCost">1000</span> Gold)
       </button>
     </div>
 
@@ -923,6 +946,49 @@
     </div>
 
     <div
+      id="firstMonsterSoulPopup"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 3500;
+        justify-content: center;
+        align-items: center;
+      "
+    >
+      <div
+        style="
+          background: #fff;
+          padding: 32px;
+          border-radius: 14px;
+          min-width: 340px;
+          text-align: center;
+        "
+      >
+        <h2>💀 Monster Soul Obtained!</h2>
+        <p>
+          <b>Monster Souls</b> are rare drops that have a percentage chance to be obtained when you defeat a monster.<br /><br />
+          The chance increases at each distance: 1 km = 1% chance, 2 km = 2% chance, and so on.<br /><br />
+          You can spend Monster Souls in the <b>Death Menu</b> to purchase powerful one-time upgrades:
+          <br/>
+          🔄 <b>Revive</b> - Revive after death<br/>
+          📚 <b>Double Area Knowledge</b> - Earn double knowledge once<br/>
+          👑 <b>Repeat Boss</b> - Defeat a boss twice
+        </p>
+        <button
+          onclick="closeFirstMonsterSoulPopup()"
+          style="margin-top: 18px; font-size: 18px"
+        >
+          Got it!
+        </button>
+      </div>
+    </div>
+
+    <div
       id="statsPopup"
       style="
         display: none;
@@ -1026,6 +1092,8 @@
       let hasSeenGameStartPopup = false;
       let hasSeenFirstDeathPopup = false;
       let hasSeenAreaKnowledgePopup = false;
+      let hasSeenFirstMonsterSoulPopup = false;
+      let hasReached3km = false;
 
       let oneTimeUpgrades = {
         revive: false,
@@ -1042,6 +1110,9 @@
       let multUpgradeUnlocked = false;
       let multUpgradeCost = 1000;
       let multUpgradeLevel = 0;
+
+      let hpUpgradeCost = 1000;
+      let hpUpgradeCount = 0;
 
       let playerLevel = 1;
       let playerExp = 0;
@@ -1139,7 +1210,15 @@
       let damageUpgradeCount = 0;
 
       function attackMonster() {
-        if (monsterHp <= 0) return;
+        const deathMenu = document.getElementById("deathMenu");
+        if (deathMenu && deathMenu.style.display === "flex") {
+          logMessage("You cannot attack while the death menu is open!");
+          return;
+        }
+        if (monsterHp <= 0) {
+          logMessage("No monster to attack!");
+          return;
+        }
         damage = Math.floor(
           baseDamage * 2 ** skillsUnlocked.doubleAttackLevel * damageMod
         );
@@ -1158,6 +1237,7 @@
         }
 
         if (playerHp === 0) {
+          document.getElementById("areaCompleteMenu").style.display = "none";
           exp += expThisRun;
           logMessage(
             `You have been defeated! You earned ${expThisRun} EXP this run. Total EXP: ${exp}. Progress reset.`
@@ -1196,8 +1276,9 @@
           upgradeCost = 20;
           completedDistances = new Set();
           doubleAreaKnowledgeActive = false;
-
-          multUpgradeUnlocked = false;
+          modifiers = { doubleGold: false, extraDamage: false };
+          hpUpgradeCost = 1000;
+          hpUpgradeCount = 0;
           multUpgradeCost = 1000;
           multUpgradeLevel = 0;
           damageMod = 1;
@@ -1212,10 +1293,8 @@
             hasSeenFirstDeathPopup = true;
             showFirstDeathPopup();
           } else {
-            updateDisplay();
             showDeathMenu();
           }
-          updateDisplay();
           saveGame();
           return;
         }
@@ -1251,7 +1330,15 @@
           logMessage(
             `You defeated ${currentMonster.name} and earned ${currentMonster.reward} gold!`
           );
-          monsterSouls += 1;
+          const soulDropChance = distance;
+          if (Math.random() * 100 < soulDropChance) {
+            monsterSouls += 1;
+            logMessage(`Monster soul dropped! (${soulDropChance}% chance)`);
+            if (!hasSeenFirstMonsterSoulPopup) {
+              hasSeenFirstMonsterSoulPopup = true;
+              showFirstMonsterSoulPopup();
+            }
+          }
           if (skillsUnlocked.healOnKill && playerHp < playerMaxHp) {
             playerHp = Math.min(playerHp + 1, playerMaxHp);
             logMessage("Heal on Kill restored 1 HP!");
@@ -1263,6 +1350,7 @@
           }
 
           if (!areaKnowledgePoints[distance]) areaKnowledgePoints[distance] = 0;
+          if (!areaKnowledge[distance]) areaKnowledge[distance] = 0;
           let knowledgeGain = doubleAreaKnowledgeActive ? 2 : 1;
           areaKnowledgePoints[distance] += knowledgeGain;
           monstersDefeated++;
@@ -1279,9 +1367,10 @@
 
             const completionGold = Math.floor(200 * (1 + distance));
             gold += completionGold;
+            areaKnowledgePoints[distance] = (areaKnowledgePoints[distance] || 0) + 100;
             showGoldPopup(completionGold);
             logMessage(
-              `Area complete! You earned ${completionGold} gold. Choose to move forward, replay, or go back.`
+              `Area complete! You earned ${completionGold} gold and 100 area knowledge. Choose to move forward, replay, or go back.`
             );
 
             if (distance === maxDistance) {
@@ -1289,7 +1378,9 @@
                 "inline-block";
             }
 
-            showAreaCompleteMenu();
+            currentMonster = {};
+            monsterHp = 0;
+            showAreaCompleteMenu(completionGold);
 
             saveGame();
           } else {
@@ -1304,14 +1395,18 @@
               spawnMonster();
             }
           }
+          updateDisplay();
+          saveGame();
+        } else {
+          updateDisplay();
         }
-        updateDisplay();
       }
 
       function travelForward() {
         if (completedDistances.has(distance)) {
           distance++;
           if (distance > maxDistance) maxDistance = distance;
+          if (distance >= 3) hasReached3km = true;
           if (distance % 10 === 0 && distance !== 0) {
             spawnBossBattle();
           } else {
@@ -1347,8 +1442,8 @@
           damageUpgradeCount++;
           logMessage("Damage upgraded!");
 
-          if (!multUpgradeUnlocked && damageUpgradeCount >= 25) {
-            multUpgradeUnlocked = true;
+          const nextMultMilestone = (multUpgradeLevel + 1) * 25;
+          if (damageUpgradeCount === nextMultMilestone) {
             const multBtn = document.getElementById("multUpgradeBtn");
             if (multBtn) multBtn.style.display = "block";
             logMessage("Special Upgrade Unlocked: x2 Damage!");
@@ -1376,6 +1471,25 @@
           saveGame();
         } else {
           logMessage("Not enough gold for multiplicative upgrade!");
+        }
+      }
+
+      function upgradeHp() {
+        if (gold >= hpUpgradeCost) {
+          gold -= hpUpgradeCost;
+          playerMaxHp += 10;
+          playerHp += 10;
+          hpUpgradeCost = Math.floor(hpUpgradeCost * 1.25);
+          hpUpgradeCount++;
+          logMessage("Max HP upgraded!");
+          const hpCostSpan = document.getElementById("hpUpgradeCost");
+          if (hpCostSpan) hpCostSpan.innerText = hpUpgradeCost;
+          const hpCountSpan = document.getElementById("hpUpgradeCount");
+          if (hpCountSpan) hpCountSpan.innerText = hpUpgradeCount;
+          updateDisplay();
+          saveGame();
+        } else {
+          logMessage("Not enough gold for HP upgrade!");
         }
       }
 
@@ -1449,7 +1563,10 @@
       }
 
       function spendLevelUpPoint(stat) {
-        if (levelUpPoints <= 0) return;
+        if (levelUpPoints <= 0) {
+          logMessage("No level up points available!");
+          return;
+        }
         if (stat === "damage") {
           levelBonusDamage += 2;
           logMessage("Major Damage Boost! (+2 Damage)");
@@ -1525,7 +1642,7 @@
           "healOnKillBtn",
           skillPoints < 2 ||
             skillsUnlocked.healOnKillLevel >= 3 ||
-            doubleAttackLevel === 0
+            skillsUnlocked.doubleAttackLevel === 0
         );
         setDisabled(
           "bossGoldBoostBtn",
@@ -1586,11 +1703,25 @@
         const multUpgradeBtnElem = document.getElementById("multUpgradeBtn");
         const multUpgradeCostElem = document.getElementById("multUpgradeCost");
         if (multUpgradeBtnElem && multUpgradeCostElem) {
-          if (multUpgradeUnlocked) {
+          const nextMultMilestone = (multUpgradeLevel + 1) * 25;
+          if (damageUpgradeCount >= nextMultMilestone) {
             multUpgradeBtnElem.style.display = "block";
             multUpgradeCostElem.innerText = multUpgradeCost;
+            multUpgradeBtnElem.disabled = gold < multUpgradeCost;
           } else {
             multUpgradeBtnElem.style.display = "none";
+          }
+        }
+
+        const hpUpgradeBtnElem = document.getElementById("hpUpgradeBtn");
+        const hpUpgradeCostElem = document.getElementById("hpUpgradeCost");
+        if (hpUpgradeBtnElem && hpUpgradeCostElem) {
+          if (hasReached3km) {
+            hpUpgradeBtnElem.style.display = "block";
+            hpUpgradeCostElem.innerText = hpUpgradeCost;
+            hpUpgradeBtnElem.disabled = gold < hpUpgradeCost;
+          } else {
+            hpUpgradeBtnElem.style.display = "none";
           }
         }
 
@@ -1643,6 +1774,8 @@
           levelUpPoints,
           skillsUnlocked,
           damageUpgradeCount,
+          hpUpgradeCost,
+          hpUpgradeCount,
         };
         localStorage.setItem("monsterClickerSave", JSON.stringify(saveData));
         logMessage("Game saved.");
@@ -1654,52 +1787,46 @@
           logMessage("No saved game found.");
           return;
         }
-        ({
-          distance,
-          maxDistance,
-          damage,
-          gold,
-          upgradeCost,
-          baseDamage,
-          levelBonusDamage = saveData.levelBonusDamage || 0,
-          areaKnowledge = saveData.areaKnowledge || {},
-          areaKnowledgePoints = saveData.areaKnowledgePoints || {},
-          monstersDefeated = 0,
-          playerHp = saveData.playerHp || 100,
-          playerMaxHp = saveData.playerMaxHp || 100,
-          exp = saveData.exp || 0,
-          expThisRun = saveData.expThisRun || 0,
-          oneTimeUpgrades = saveData.oneTimeUpgrades || {
-            revive: false,
-            doubleAreaKnowledge: false,
-            repeatBoss: false,
-          },
-          otReviveCost = saveData.otReviveCost || 10,
-          otDoubleAreaKnowledgeCost = saveData.otDoubleAreaKnowledgeCost || 15,
-          otRepeatBossCost = saveData.otRepeatBossCost || 20,
-          doubleAreaKnowledgeActive = false,
-          completedDistances = [],
-          multUpgradeUnlocked = false,
-          multUpgradeCost = 1000,
-          multUpgradeLevel = 0,
-          damageMod = 1,
-          modifiers = { doubleGold: false, extraDamage: false },
-          bossesDefeatedThisLife = new Set(
-            saveData.bossesDefeatedThisLife || []
-          ),
-          playerLevel = 1,
-          playerExp = 0,
-          expToNextLevel = 100,
-          skillPoints = 0,
-          levelUpPoints = saveData.levelUpPoints || 0,
-          skillsUnlocked = saveData.skillsUnlocked || {
-            doubleAttack: false,
-            healOnKill: false,
-            bossGoldBoost: false,
-            ultimatePower: false,
-          },
-          damageUpgradeCount = saveData.damageUpgradeCount || 0,
-        } = saveData);
+        distance = saveData.distance || 0;
+        maxDistance = saveData.maxDistance || 0;
+        damage = saveData.damage || 1;
+        gold = saveData.gold || 0;
+        upgradeCost = saveData.upgradeCost || 20;
+        baseDamage = saveData.baseDamage || 1;
+        levelBonusDamage = saveData.levelBonusDamage || 0;
+        areaKnowledge = saveData.areaKnowledge && typeof saveData.areaKnowledge === 'object' ? saveData.areaKnowledge : {};
+        areaKnowledgePoints = saveData.areaKnowledgePoints && typeof saveData.areaKnowledgePoints === 'object' ? saveData.areaKnowledgePoints : {};
+        monstersDefeated = 0;
+        playerHp = saveData.playerHp || 100;
+        playerMaxHp = saveData.playerMaxHp || 100;
+        exp = saveData.exp || 0;
+        expThisRun = saveData.expThisRun || 0;
+        oneTimeUpgrades = saveData.oneTimeUpgrades || { revive: false, doubleAreaKnowledge: false, repeatBoss: false };
+        otReviveCost = saveData.otReviveCost || 10;
+        otDoubleAreaKnowledgeCost = saveData.otDoubleAreaKnowledgeCost || 15;
+        otRepeatBossCost = saveData.otRepeatBossCost || 20;
+        doubleAreaKnowledgeActive = false;
+        multUpgradeUnlocked = saveData.multUpgradeUnlocked || false;
+        multUpgradeCost = saveData.multUpgradeCost || 1000;
+        multUpgradeLevel = saveData.multUpgradeLevel || 0;
+        damageMod = saveData.damageMod || 1;
+        modifiers = saveData.modifiers || { doubleGold: false, extraDamage: false };
+        bossesDefeatedThisLife = new Set(saveData.bossesDefeatedThisLife || []);
+        playerLevel = saveData.playerLevel || 1;
+        playerExp = saveData.playerExp || 0;
+        expToNextLevel = saveData.expToNextLevel || 100;
+        skillPoints = saveData.skillPoints || 0;
+        levelUpPoints = saveData.levelUpPoints || 0;
+        skillsUnlocked = {
+          doubleAttackLevel: saveData.skillsUnlocked?.doubleAttackLevel || 0,
+          healOnKillLevel: saveData.skillsUnlocked?.healOnKillLevel || 0,
+          bossGoldBoost: saveData.skillsUnlocked?.bossGoldBoost || false,
+          ultimatePower: saveData.skillsUnlocked?.ultimatePower || false,
+        };
+        damageUpgradeCount = saveData.damageUpgradeCount || 0;
+        monsterSouls = saveData.monsterSouls || 0;
+        hpUpgradeCost = saveData.hpUpgradeCost || 1000;
+        hpUpgradeCount = saveData.hpUpgradeCount || 0;
 
         completedDistances = new Set(saveData.completedDistances || []);
         if (modifiers.doubleGold) {
@@ -1764,8 +1891,8 @@
           areaKnowledgePoints = {};
           goldModifier = 1;
           skillsUnlocked = {
-            doubleAttack: false,
-            healOnKill: false,
+            doubleAttackLevel: 0,
+            healOnKillLevel: 0,
             bossGoldBoost: false,
             ultimatePower: false,
           };
@@ -1840,6 +1967,8 @@
             hasSeenGameStartPopup,
             hasSeenFirstDeathPopup,
             hasSeenAreaKnowledgePopup,
+            hasSeenFirstMonsterSoulPopup,
+            hasReached3km,
           })
         );
       }
@@ -1850,6 +1979,8 @@
           hasSeenGameStartPopup = state.hasSeenGameStartPopup;
           hasSeenFirstDeathPopup = state.hasSeenFirstDeathPopup;
           hasSeenAreaKnowledgePopup = state.hasSeenAreaKnowledgePopup;
+          hasSeenFirstMonsterSoulPopup = state.hasSeenFirstMonsterSoulPopup || false;
+          hasReached3km = state.hasReached3km || false;
         }
       }
 
@@ -1872,7 +2003,23 @@
         savePopupState();
       }
 
-      function showAreaCompleteMenu() {
+      function showFirstMonsterSoulPopup() {
+        document.getElementById("firstMonsterSoulPopup").style.display = "flex";
+      }
+
+      function closeFirstMonsterSoulPopup() {
+        document.getElementById("firstMonsterSoulPopup").style.display = "none";
+        hasSeenFirstMonsterSoulPopup = true;
+        savePopupState();
+      }
+
+      function showAreaCompleteMenu(completionGold) {
+        const rewardsText = `
+          <strong>Rewards Earned:</strong><br>
+          💰 Gold: ${completionGold}<br>
+          📚 Area Knowledge: 100
+        `;
+        document.getElementById("areaCompleteText").innerHTML = rewardsText;
         document.getElementById("areaCompleteMenu").style.display = "flex";
       }
 
@@ -1884,6 +2031,7 @@
       function replayAreaFromComplete() {
         document.getElementById("areaCompleteMenu").style.display = "none";
         monstersDefeated = 0;
+        completedDistances.delete(distance);
         spawnMonster();
         updateDisplay();
         saveGame();
@@ -1904,9 +2052,30 @@
         }
       });
 
+      window.addEventListener("error", (event) => {
+        console.error("Error caught:", event.error);
+      });
+
+      window.addEventListener("unhandledrejection", (event) => {
+        console.error("Unhandled promise rejection:", event.reason);
+      });
+
       window.addEventListener("keydown", (event) => {
         if (event.key === "1") {
           upgradeDamage();
+        }
+        if (event.key.toUpperCase() === "K") {
+          upgradeAreaKnowledge();
+        }
+        const areaCompleteMenu = document.getElementById("areaCompleteMenu");
+        if (areaCompleteMenu && areaCompleteMenu.style.display === "flex") {
+          if (event.key.toUpperCase() === "R") {
+            replayAreaFromComplete();
+          } else if (event.key.toUpperCase() === "F") {
+            moveForwardFromComplete();
+          } else if (event.key.toUpperCase() === "B") {
+            moveBackFromComplete();
+          }
         }
       });
       function showDeathMenu() {
@@ -1923,10 +2092,8 @@
           otRepeatBossCost;
         updateOneTimeButtons();
         showDeathTab("perm");
-        monsterHp = 0;
-        currentMonster = {};
-        document.getElementById("monsterName").innerText = "None";
-        document.getElementById("monsterHp").innerText = "-";
+        spawnMonster();
+        updateDisplay();
       }
 
       function closeDeathMenu() {
@@ -2195,6 +2362,8 @@
           logMessage(
             "Skill unlocked: Ultimate Power! All your stats are massively boosted."
           );
+        } else if (skill !== "doubleAttack") {
+          logMessage("Cannot unlock this skill - requirements not met.");
         }
         updateSkillsPanel();
         updateDisplay();
@@ -2260,6 +2429,9 @@
         } else if (type === "mult") {
           text =
             "Double your damage multiplier. Significantly increases power!";
+        } else if (type === "hp") {
+          text =
+            "Increase your max HP by 10. Cost increases with each purchase. Unlocks at 3km!";
         }
 
         tooltip.innerText = text;
@@ -2335,5 +2507,6 @@
       window.showTooltip = showTooltip;
       window.hideTooltip = hideTooltip;
     </script>
+    </div>
   </body>
 </html>
